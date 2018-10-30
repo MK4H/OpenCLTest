@@ -20,7 +20,7 @@ void measure(
 	std::cout << test_name << " finished." << std::endl << "Return value: " << ret << std::endl << "Time: " << duration.count() << std::endl << std::endl;
 }
 
-static std::vector<cl::Device> get_all_devices()
+static std::vector<cl::Device> get_all_devices(cl_device_type device_type)
 {
 	std::vector <cl::Device> devices;
 	std::vector<cl::Platform> platforms;
@@ -32,7 +32,7 @@ static std::vector<cl::Device> get_all_devices()
 	for (auto&& platform : platforms)
 	{
 		std::vector<cl::Device> platform_devices;
-		if (platform.getDevices(CL_DEVICE_TYPE_ALL, &platform_devices))
+		if (platform.getDevices(device_type, &platform_devices))
 		{
 			continue;
 		}
@@ -54,7 +54,7 @@ static void do_speed_test(std::ostream & out)
 	std::generate(input_l.begin(), input_l.end(), []() { return 1; });
 	std::generate(input_r.begin(), input_r.end(), []() { return 2; });
 
-	auto devices = get_all_devices();
+	auto devices = get_all_devices(CL_DEVICE_TYPE_ALL);
 
 	const size_t cycles = 100;
 
@@ -78,8 +78,15 @@ int main(int argc, char * argv[])
 	try
 	{
 		/*print_all_devices(out);*/
-		auto kernel = try_compile_kernel()
 
+
+		auto devices = get_all_devices(CL_DEVICE_TYPE_GPU);
+
+		std::ifstream kernel_file{ "kernel.cl" };
+		std::string source_string{ std::istreambuf_iterator<char>{kernel_file}, std::istreambuf_iterator<char>{} };
+
+		auto kernel = try_compile_kernel(source_string, devices.front(), "-cl-std=CL1.2", "n_body_sim");
+		std::cout << "Success" << std::endl;
 	}
 	catch(std::exception & e)
 	{

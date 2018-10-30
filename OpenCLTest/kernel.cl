@@ -4,75 +4,10 @@
 // }
 
 
-__kernel void(__global float4 *input_pos_rad, __global float3 *input_vel, __global size_t items, __global float time_step, __global float gravity_const, __local float4 *current, __global float4 *output_pos_rad, __global float3 *output_vel) {
-	float4 my_val = input_pos_rad[get_global_id(0)];
-	float3 my_vel = input_vel[get_global_id(0)];
-
-	float3 result_accel = (float3)(0, 0, 0);
-
-	size_t current_base_item = 0;
-	//Do interactions with all but the last probably uncomplete group
-	while (current_base_item + get_local_size(0) < items) {
-		//Copy current other bodies to local memory, so we can do some calculations
-		current[get_local_id(0)] = input_pos_rad[current_base_item + get_local_id(0)];
-		barrier(CLK_LOCAL_MEM_FENCE);
-
-		for	(size_t i = 0; i < get_local_size(0); i++) {
-			result_accel += process(current_base_item, i, my_val, current[i], &my_vel, input_vel);		
-		}
-
-		barrier(CLK_LOCAL_MEM_FENCE);
-		current_base_item += get_local_size(0);
-	}
-
-	//Last cycle with unfilled local memory
-	if (current_base_item + get_local_id(0) < items) {
-		current[get_local_id(0)] = input_pos_rad[current_base_item + get_local_id(0)];
-	}
-	barrier(CLK_LOCAL_MEM_FENCE);
-
-	for (size_t i = 0; i < items - current_base_item; i++) {
-		result_accel += process(current_base_item, i, my_val, current[i], &my_vel, input_vel);	
-	}
-
-	float3 res_vel = my_vel + result_accel;
-	float3 res_pos = my_val.xyz + res_vel * time_step;
-
-	output_vel[get_global_id(0)] = res_vel;
-	output_pos_rad[get_global_id(0)].xyz = res_pos;
-	output_pos_rad[get_global_id(0)].w = my_val.w;
-}
-
-float3 process(size_t current_base_item, size_t i, float4 my_val, float4 current_val, float3 *my_vel, __global float3 *input_vel){
-	//Prevent calculating pull on the body itself
-	if (get_global_id(0) == current_base_item + get_local_id(0)) {
-		return;
-	}
-			
-	float4 source_pos = (my_val.xyz, 0);
-	float4 target_pos = (current_val.xyz, 0);
-
-	float4 diff = source_pos - target_pos;
-	float dist = length(diff);
-
-	float source_mass = get_mass(my_val.w);
-	float target_mass = get_mass(current_val.w);
-	//If radius + radius is bigger than the distance, we have a collision
-	if (my_val.w + current_val.w > dist) {
-		do_collision(my_val, current_val, dist, source_mass, target_mass, my_vel, input_vel[current_base_item + i]);
-	}
-		
-	return get_gravitational_acceleration(diff, dist, target_mass, gravity_const);
-}
-
-
 float get_mass(float radius/*, float density */) {
-	float radius = target_val.w;
 	float r_3 = radius * radius * radius;
 	return 4.0f/3.0f * M_PI * r_3 /** density */;
 }
-
-
 
 float3 get_gravitational_acceleration(float4 diff, float dist, float target_mass, float gravity_const) {
 	float dist_sqr = dist * dist;
@@ -84,12 +19,12 @@ float3 get_gravitational_acceleration(float4 diff, float dist, float target_mass
 void do_collision(float3 source_pos, float3 target_pos, float dist, float source_mass, float target_mass, float3 *source_vel, float3 target_vel) {
 	//Collision
 	//Adapted from https://www.plasmaphysics.org.uk/programs/coll3d_cpp.htm
-	float4 relative_pos = (float4)(target_val - source_val, 0);
+	float4 relative_pos = (float4)(target_pos - source_pos, 0);
 	float4 rel_vel_vec = (float4) (target_vel - *source_vel, 0);
 	float rel_vel = length(rel_vel_vec);
 
 	//boost coordinate system so that target is resting 
-	float4 source_vel_adapted = *source_vel - rel_vel_vec;
+	float4 source_vel_adapted = (float4)(*source_vel,0) - rel_vel_vec;
 
 	//find polar coords of target
 	float theta = acos(relative_pos.z / rel_vel);
@@ -113,7 +48,7 @@ void do_collision(float3 source_pos, float3 target_pos, float dist, float source
 									  0);
 
 	float f_rotated_rel_vel_z = rotated_rel_vel.z / rel_vel;
-	f_rotated_rel_vel_z = clamp(f_rotated_rel_vel_z, -1, 1);
+	f_rotated_rel_vel_z = clamp(f_rotated_rel_vel_z, -1.0f, 1.0f);
 
 	float thetav = acos(f_rotated_rel_vel_z);
 	float phiv = 0;
@@ -122,10 +57,10 @@ void do_collision(float3 source_pos, float3 target_pos, float dist, float source
 	}
 
 	//     **** calculate the normalized impact parameter ***
-	float dr = d * sin(thetav) / dist;
+	float dr = dist * sin(thetav) / dist;
 
 	//     **** return old positions and velocities if balls do not collide ***
-	if (thetav > M_PI_2 || abs(dr) > 1) {
+	if (thetav > M_PI_2 || fabs(dr) > 1) {
 		return;
 	}
 
@@ -170,3 +105,69 @@ void do_collision(float3 source_pos, float3 target_pos, float dist, float source
 
 	return;
 }
+
+
+float3 process(size_t current_base_item, size_t i, float4 my_val, float4 current_val, float gravity_const, float3 *my_vel, __global float3 *input_vel){
+	//Prevent calculating pull on the body itself
+	if (get_global_id(0) == current_base_item + get_local_id(0)) {
+		return (float3)(0, 0, 0);
+	}
+			
+	float3 source_pos = my_val.xyz;
+	float3 target_pos = current_val.xyz;
+
+	float4 diff = (float4)(source_pos - target_pos, 0);
+	float dist = length(diff);
+
+	float source_mass = get_mass(my_val.w);
+	float target_mass = get_mass(current_val.w);
+	//If radius + radius is bigger than the distance, we have a collision
+	if (my_val.w + current_val.w > dist) {
+		do_collision(source_pos, target_pos, dist, source_mass, target_mass, my_vel, input_vel[current_base_item + i]);
+	}
+		
+	return get_gravitational_acceleration(diff, dist, target_mass, gravity_const);
+}
+
+
+
+
+__kernel void n_body_sim(__global float4 *input_pos_rad, __global float3 *input_vel, unsigned int items, float time_step, float gravity_const, __local float4 *current, __global float4 *output_pos_rad, __global float3 *output_vel) {
+	float4 my_val = input_pos_rad[get_global_id(0)];
+	float3 my_vel = input_vel[get_global_id(0)];
+
+	float3 result_accel = (float3)(0, 0, 0);
+
+	size_t current_base_item = 0;
+	//Do interactions with all but the last probably uncomplete group
+	while (current_base_item + get_local_size(0) < items) {
+		//Copy current other bodies to local memory, so we can do some calculations
+		current[get_local_id(0)] = input_pos_rad[current_base_item + get_local_id(0)];
+		barrier(CLK_LOCAL_MEM_FENCE);
+
+		for	(size_t i = 0; i < get_local_size(0); i++) {
+			result_accel += process(current_base_item, i, my_val, current[i], gravity_const, &my_vel, input_vel);		
+		}
+
+		barrier(CLK_LOCAL_MEM_FENCE);
+		current_base_item += get_local_size(0);
+	}
+
+	//Last cycle with unfilled local memory
+	if (current_base_item + get_local_id(0) < items) {
+		current[get_local_id(0)] = input_pos_rad[current_base_item + get_local_id(0)];
+	}
+	barrier(CLK_LOCAL_MEM_FENCE);
+
+	for (size_t i = 0; i < items - current_base_item; i++) {
+		result_accel += process(current_base_item, i, my_val, current[i], gravity_const, &my_vel, input_vel);	
+	}
+
+	float3 res_vel = my_vel + result_accel;
+	float3 res_pos = my_val.xyz + res_vel * time_step;
+
+	output_vel[get_global_id(0)] = res_vel;
+	output_pos_rad[get_global_id(0)].xyz = res_pos;
+	output_pos_rad[get_global_id(0)].w = my_val.w;
+}
+

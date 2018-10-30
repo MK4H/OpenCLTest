@@ -12,7 +12,7 @@ void print_all_devices(std::ostream &output);
 
 void print_device_stats(const cl::Device &device, std::ostream &output);
 
-cl::Kernel try_compile_kernel(const std::string& kernel_string, const cl::Device& device, const std::string& build_flags);
+cl::Kernel try_compile_kernel(const std::string& kernel_string, const cl::Device& device, const std::string& build_flags, const std::string& kernel_name);
 
 #endif // !TESTS_H_GUARD__
 
