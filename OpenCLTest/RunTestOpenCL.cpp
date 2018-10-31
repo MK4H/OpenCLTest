@@ -1,4 +1,4 @@
-#include "Tests.h"
+#include "Tests.hpp"
 #include <CL/cl.hpp>
 #include <vector>
 #include <fstream>

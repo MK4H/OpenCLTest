@@ -1,4 +1,4 @@
-#include "Tests.h"
+#include "Tests.hpp"
 #include <string>
 #include <CL/cl.hpp>
 #include <sstream>

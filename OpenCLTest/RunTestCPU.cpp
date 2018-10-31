@@ -1,4 +1,4 @@
-#include "Tests.h"
+#include "Tests.hpp"
 #include <vector>
 
 int run_test_cpu(const size_t cycles, const std::vector<int> &test_data_l,const std::vector<int> &test_data_r, std::vector<int> & output)

@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <functional>
-#include "Tests.h"
+#include "Tests.hpp"
 
 template<typename T, typename ...P> 
 void measure(

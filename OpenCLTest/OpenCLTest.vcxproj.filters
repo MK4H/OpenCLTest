@@ -27,6 +27,9 @@
     <ClCompile Include="TryCompileKernel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="n_body_sim.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="kernel.cl">
@@ -34,7 +37,10 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Tests.h">
+    <ClInclude Include="n_body_sim.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Tests.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
